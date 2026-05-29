@@ -1,0 +1,6 @@
+aiogram~=3.13
+curl-cffi~=0.15
+beautifulsoup4~=4.12
+lxml~=5.2
+apscheduler~=3.10
+aiosqlite~=0.20

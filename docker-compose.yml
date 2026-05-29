@@ -1,1 +1,7 @@
-services: {}
+services:
+  bot-casa:
+    build: ./bot-casa
+    restart: unless-stopped
+    env_file: ./bot-casa/.env
+    volumes:
+      - ./bot-casa/data:/app/data
