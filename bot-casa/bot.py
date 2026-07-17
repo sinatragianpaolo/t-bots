@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import quote
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -172,6 +173,14 @@ async def _notify_immobiliare_blocked(bot: Bot) -> None:
         logger.error(f"Failed to send blocked-notification: {e}")
 
 
+def _maps_url(address: str) -> str:
+    # Addresses often come as "via - zona" (e.g. "Via S. Giovanni Bosco -
+    # San Donato"); Maps reads the dash as two separate places and draws a
+    # route between them instead of dropping a single pin.
+    street = address.split(" - ")[0]
+    return f"https://www.google.com/maps/search/?api=1&query={quote(street)}"
+
+
 def _format(listing: Listing) -> str:
     price = f"€{int(listing.price):,}".replace(",", ".") if listing.price else "N/D"
     details = " · ".join(filter(None, [
@@ -182,7 +191,7 @@ def _format(listing: Listing) -> str:
         f"🏠 <b>{listing.title or 'Annuncio'}</b>",
         f"💰 {price}",
         details or None,
-        f"📍 {listing.address}" if listing.address else None,
+        f'📍 <a href="{_maps_url(listing.address)}">{listing.address}</a>' if listing.address else None,
         f'🔗 <a href="{listing.url}">Vedi annuncio</a>',
         f"<i>Fonte: {listing.source}</i>",
     ]
