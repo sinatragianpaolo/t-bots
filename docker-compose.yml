@@ -3,5 +3,11 @@ services:
     build: ./bot-casa
     restart: unless-stopped
     env_file: ./bot-casa/.env
+    # Chrome's user-namespace sandbox needs this in Docker (default seccomp
+    # blocks unprivileged namespace creation); avoids resorting to
+    # --no-sandbox, which is itself a signal anti-bot checks look for.
+    cap_add:
+      - SYS_ADMIN
     volumes:
       - ./bot-casa/data:/app/data
+      - ./bot-casa/browser_profile_chrome:/app/browser_profile_chrome

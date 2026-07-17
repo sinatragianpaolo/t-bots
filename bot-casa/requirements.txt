@@ -4,3 +4,5 @@ beautifulsoup4~=4.12
 lxml~=5.2
 apscheduler~=3.10
 aiosqlite~=0.20
+camoufox[geoip]~=0.4
+playwright==1.60.0  # camoufox 0.4.11's bundled Juggler is incompatible with playwright>=1.61 (see daijro/camoufox#653)

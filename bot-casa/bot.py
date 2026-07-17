@@ -1,11 +1,12 @@
 import logging
 import os
+from urllib.parse import quote
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from db import get_effective_filters, get_stats, increment_stats, is_seen, mark_seen, set_filter
+from db import clear_seen_listings, get_effective_filters, get_stats, increment_stats, is_seen, mark_seen, set_filter
 from scrapers import search_all
 from scrapers.base import Listing
 
@@ -32,7 +33,8 @@ async def cmd_start(message: Message) -> None:
         "/set prezzo_max &lt;€&gt; — imposta il prezzo massimo\n"
         "/set locali &lt;n&gt; — imposta il numero minimo di locali\n"
         "/cerca — avvia una ricerca adesso\n"
-        "/stats — statistiche annunci controllati e inviati"
+        "/stats — statistiche annunci controllati e inviati\n"
+        "/clear — svuota la cache degli annunci già inviati"
     )
 
 
@@ -85,6 +87,37 @@ async def cmd_stats(message: Message) -> None:
     )
 
 
+_CLEAR_KB = InlineKeyboardMarkup(inline_keyboard=[[
+    InlineKeyboardButton(text="✅ Sì, svuota", callback_data="clear_confirm"),
+    InlineKeyboardButton(text="❌ Annulla", callback_data="clear_cancel"),
+]])
+
+
+@router.message(Command("clear"))
+async def cmd_clear(message: Message) -> None:
+    await message.answer(
+        "⚠️ Tutti gli annunci già inviati verranno dimenticati e "
+        "<b>ritrasmessi alla prossima ricerca</b>. Procedere?",
+        reply_markup=_CLEAR_KB,
+    )
+
+
+@router.callback_query(F.data == "clear_confirm")
+async def cb_clear_confirm(callback: CallbackQuery) -> None:
+    count = await clear_seen_listings()
+    await callback.message.edit_text(
+        f"🗑️ Cache svuotata — {count} annunci rimossi.\n"
+        "Al prossimo /cerca verranno reinviati tutti gli annunci trovati."
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "clear_cancel")
+async def cb_clear_cancel(callback: CallbackQuery) -> None:
+    await callback.message.edit_text("Operazione annullata.")
+    await callback.answer()
+
+
 @router.message(Command("cerca"))
 async def cmd_cerca(message: Message) -> None:
     await message.answer("🔍 Ricerca in corso…")
@@ -102,8 +135,11 @@ async def run_search(bot: Bot) -> int:
 
     filters = await get_effective_filters()
     logger.info(f"Search started with filters: {filters}")
-    listings = await search_all(filters)
+    listings, blocked = await search_all(filters)
     logger.info(f"Total listings found: {len(listings)}")
+
+    if "immobiliare" in blocked:
+        await _notify_immobiliare_blocked(bot)
 
     new_count = 0
     for listing in listings:
@@ -120,6 +156,31 @@ async def run_search(bot: Bot) -> int:
     return new_count
 
 
+async def _notify_immobiliare_blocked(bot: Bot) -> None:
+    text = (
+        "⚠️ <b>immobiliare.it</b> ha bloccato lo scraper (anti-bot).\n\n"
+        "Per sbloccarlo, da un PC con schermo, nella cartella <code>t-bots</code>:\n\n"
+        "<code>docker compose stop bot-casa\n"
+        "cd bot-casa\n"
+        ".venv/bin/python scripts/solve_captcha.py</code>\n\n"
+        "Risolvi il captcha nella finestra che si apre, premi INVIO nel terminale, poi:\n\n"
+        "<code>cd ..\n"
+        "docker compose start bot-casa</code>"
+    )
+    try:
+        await bot.send_message(CHAT_ID, text)
+    except Exception as e:
+        logger.error(f"Failed to send blocked-notification: {e}")
+
+
+def _maps_url(address: str) -> str:
+    # Addresses often come as "via - zona" (e.g. "Via S. Giovanni Bosco -
+    # San Donato"); Maps reads the dash as two separate places and draws a
+    # route between them instead of dropping a single pin.
+    street = address.split(" - ")[0]
+    return f"https://www.google.com/maps/search/?api=1&query={quote(street)}"
+
+
 def _format(listing: Listing) -> str:
     price = f"€{int(listing.price):,}".replace(",", ".") if listing.price else "N/D"
     details = " · ".join(filter(None, [
@@ -130,7 +191,7 @@ def _format(listing: Listing) -> str:
         f"🏠 <b>{listing.title or 'Annuncio'}</b>",
         f"💰 {price}",
         details or None,
-        f"📍 {listing.address}" if listing.address else None,
+        f'📍 <a href="{_maps_url(listing.address)}">{listing.address}</a>' if listing.address else None,
         f'🔗 <a href="{listing.url}">Vedi annuncio</a>',
         f"<i>Fonte: {listing.source}</i>",
     ]
