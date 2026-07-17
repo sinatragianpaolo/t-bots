@@ -3,11 +3,15 @@ import logging
 
 from bs4 import BeautifulSoup
 
-from ._camoufox import get_html
+from ._chrome import get_html
 from .base import Listing
 
 logger = logging.getLogger(__name__)
 SOURCE = "immobiliare.it"
+
+
+class BlockedError(Exception):
+    """Raised when immobiliare.it's anti-bot check blocks the request."""
 
 
 async def search(filters: dict) -> list[Listing]:
@@ -25,8 +29,7 @@ async def search(filters: dict) -> list[Listing]:
         return []
 
     if "__NEXT_DATA__" not in html:
-        logger.warning(f"[{SOURCE}] blocked (no __NEXT_DATA__ in response)")
-        return []
+        raise BlockedError("no __NEXT_DATA__ in response — anti-bot check likely triggered")
 
     soup = BeautifulSoup(html, "lxml")
     script = soup.find("script", id="__NEXT_DATA__")

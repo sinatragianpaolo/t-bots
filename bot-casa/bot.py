@@ -134,8 +134,11 @@ async def run_search(bot: Bot) -> int:
 
     filters = await get_effective_filters()
     logger.info(f"Search started with filters: {filters}")
-    listings = await search_all(filters)
+    listings, blocked = await search_all(filters)
     logger.info(f"Total listings found: {len(listings)}")
+
+    if "immobiliare" in blocked:
+        await _notify_immobiliare_blocked(bot)
 
     new_count = 0
     for listing in listings:
@@ -150,6 +153,23 @@ async def run_search(bot: Bot) -> int:
 
     await increment_stats(checked=len(listings), sent=new_count)
     return new_count
+
+
+async def _notify_immobiliare_blocked(bot: Bot) -> None:
+    text = (
+        "⚠️ <b>immobiliare.it</b> ha bloccato lo scraper (anti-bot).\n\n"
+        "Per sbloccarlo, da un PC con schermo, nella cartella <code>t-bots</code>:\n\n"
+        "<code>docker compose stop bot-casa\n"
+        "cd bot-casa\n"
+        ".venv/bin/python scripts/solve_captcha.py</code>\n\n"
+        "Risolvi il captcha nella finestra che si apre, premi INVIO nel terminale, poi:\n\n"
+        "<code>cd ..\n"
+        "docker compose start bot-casa</code>"
+    )
+    try:
+        await bot.send_message(CHAT_ID, text)
+    except Exception as e:
+        logger.error(f"Failed to send blocked-notification: {e}")
 
 
 def _format(listing: Listing) -> str:
