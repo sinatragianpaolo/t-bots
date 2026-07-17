@@ -1,11 +1,11 @@
 import logging
 import os
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from db import get_effective_filters, get_stats, increment_stats, is_seen, mark_seen, set_filter
+from db import clear_seen_listings, get_effective_filters, get_stats, increment_stats, is_seen, mark_seen, set_filter
 from scrapers import search_all
 from scrapers.base import Listing
 
@@ -32,7 +32,8 @@ async def cmd_start(message: Message) -> None:
         "/set prezzo_max &lt;€&gt; — imposta il prezzo massimo\n"
         "/set locali &lt;n&gt; — imposta il numero minimo di locali\n"
         "/cerca — avvia una ricerca adesso\n"
-        "/stats — statistiche annunci controllati e inviati"
+        "/stats — statistiche annunci controllati e inviati\n"
+        "/clear — svuota la cache degli annunci già inviati"
     )
 
 
@@ -83,6 +84,37 @@ async def cmd_stats(message: Message) -> None:
         f"• Annunci controllati: <b>{checked:,}</b>\n"
         f"• Annunci inviati: <b>{sent:,}</b>\n"
     )
+
+
+_CLEAR_KB = InlineKeyboardMarkup(inline_keyboard=[[
+    InlineKeyboardButton(text="✅ Sì, svuota", callback_data="clear_confirm"),
+    InlineKeyboardButton(text="❌ Annulla", callback_data="clear_cancel"),
+]])
+
+
+@router.message(Command("clear"))
+async def cmd_clear(message: Message) -> None:
+    await message.answer(
+        "⚠️ Tutti gli annunci già inviati verranno dimenticati e "
+        "<b>ritrasmessi alla prossima ricerca</b>. Procedere?",
+        reply_markup=_CLEAR_KB,
+    )
+
+
+@router.callback_query(F.data == "clear_confirm")
+async def cb_clear_confirm(callback: CallbackQuery) -> None:
+    count = await clear_seen_listings()
+    await callback.message.edit_text(
+        f"🗑️ Cache svuotata — {count} annunci rimossi.\n"
+        "Al prossimo /cerca verranno reinviati tutti gli annunci trovati."
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "clear_cancel")
+async def cb_clear_cancel(callback: CallbackQuery) -> None:
+    await callback.message.edit_text("Operazione annullata.")
+    await callback.answer()
 
 
 @router.message(Command("cerca"))

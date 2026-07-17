@@ -79,6 +79,16 @@ async def get_stats() -> dict[str, int]:
     return {row[0]: row[1] for row in rows}
 
 
+async def clear_seen_listings() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM seen_listings")
+        row = await cursor.fetchone()
+        count = row[0] if row else 0
+        await db.execute("DELETE FROM seen_listings")
+        await db.commit()
+    return count
+
+
 async def get_effective_filters() -> dict:
     from config import DEFAULT_FILTERS
 

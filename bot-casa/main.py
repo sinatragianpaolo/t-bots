@@ -31,7 +31,7 @@ async def main() -> None:
     scheduler.start()
     logging.info("Scheduler started — search every 6 hours")
 
-    await dp.start_polling(bot, allowed_updates=["message"])
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":
